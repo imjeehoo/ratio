@@ -3,10 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/glass.js --bundle --minify --format=esm --outfile=public/glass.js --loader:.css=css"
+    "build": "esbuild src/main.jsx --bundle --minify --format=esm --jsx=automatic --define:process.env.NODE_ENV=\\\"production\\\" --outfile=public/app.js"
   },
   "dependencies": {
-    "@glass-sdk/liquid-glass": "~0.0.2"
+    "@glass-sdk/liquid-glass": "~0.0.2",
+    "motion": "^14.1.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

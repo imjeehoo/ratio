@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="glass.css">
+<link rel="stylesheet" href="app.css">
 <style>
   html { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
   body { margin: 0; }
@@ -54,7 +54,7 @@
       --on-primary: #000000;
     }
   }
-  html, body { height: 100%; box-sizing: border-box; }
+  html, body, #root { height: 100%; box-sizing: border-box; }
   body {
     background: var(--page);
     color: var(--ink);
@@ -86,7 +86,9 @@
     justify-content: center;
     padding: 12px 16px;
     border-bottom: 1px solid var(--edge);
+    overflow: hidden;
   }
+  .screen-inner { position: relative; width: 100%; }
   .chips {
     display: flex;
     flex-wrap: wrap;
@@ -105,6 +107,8 @@
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
+  .item { display: inline-flex; align-items: center; gap: 6px; }
+  .chip > span { display: inline-block; }
   .sep {
     color: var(--muted);
     font-size: 18px;
@@ -271,249 +275,7 @@
 </style>
 </head>
 <body>
-<div class="app" data-glass-scene>
-  <div class="backdrop" data-glass-content></div>
-  <section class="screen" id="screen" aria-live="polite"></section>
-
-  <div class="pad">
-    <div class="top-actions">
-      <button class="btn" data-glass id="undo" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z"/>
-          <path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/>
-        </svg>
-        <span>실행 취소</span>
-      </button>
-      <button class="btn danger" data-glass id="clear" type="button">지우기</button>
-      <button class="btn icon" data-glass="circle" id="openHistory" type="button" aria-label="기록">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="9"/>
-          <path d="M12 7v5l3.5 2"/>
-        </svg>
-      </button>
-    </div>
-  </div>
-
-  <div class="spacer"></div>
-
-  <div class="pad">
-    <form class="entry" id="entry" autocomplete="off">
-      <div class="field-wrap" data-glass><input class="field" id="manual" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" enterkeyhint="done" placeholder="직접 입력하기" aria-label="직접 입력하기"></div>
-      <button class="add" data-glass id="add" type="submit" disabled>추가</button>
-    </form>
-
-    <div class="quick" id="quick"></div>
-
-    <button class="main" data-glass id="main" type="button">계산하기</button>
-  </div>
-</div>
-
-<div class="history" id="history" role="dialog" aria-modal="true" aria-label="기록" hidden data-glass-scene>
-  <div class="backdrop" data-glass-content></div>
-  <div class="history-cap"></div>
-  <div class="history-list" id="historyList"></div>
-  <div class="history-foot" data-glass-scene>
-    <div class="backdrop" data-glass-content></div>
-    <button class="main" data-glass id="closeHistory" type="button">닫기</button>
-  </div>
-</div>
-
-<script>
-  (function () {
-    var QUICK = [5, 10, 15, 20, 25, 30, 35, 40, 45];
-    var seq = [];
-    var result = null;
-    var history = []; // oldest first, memory only
-
-    var screenEl = document.getElementById('screen');
-    var undoBtn = document.getElementById('undo');
-    var clearBtn = document.getElementById('clear');
-    var mainBtn = document.getElementById('main');
-    var quickEl = document.getElementById('quick');
-    var form = document.getElementById('entry');
-    var input = document.getElementById('manual');
-    var addBtn = document.getElementById('add');
-    var historyEl = document.getElementById('history');
-    var historyList = document.getElementById('historyList');
-
-    function gcd(a, b) { while (b) { var t = a % b; a = b; b = t; } return a; }
-
-    // Each entry: { frac: [n, d] | null, pct: string }
-    function compute(list) {
-      var out = new Array(list.length);
-      var tail = 0;
-      for (var i = list.length - 1; i >= 0; i--) {
-        tail += list[i];
-        if (i === list.length - 1) { out[i] = { frac: null, pct: '100%' }; continue; }
-        var g = gcd(list[i], tail);
-        out[i] = { frac: [list[i] / g, tail / g], pct: pct(list[i], tail) };
-      }
-      return out;
-    }
-
-    function pct(v, total) {
-      var p = Math.round((v / total) * 1000) / 10;
-      return String(p % 1 === 0 ? p.toFixed(0) : p.toFixed(1)) + '%';
-    }
-
-    function numSize(len) { return len <= 3 ? 28 : len === 4 ? 24 : len === 5 ? 20 : 17; }
-    function fracSize(len) { return len <= 3 ? 18 : len === 4 ? 16 : len === 5 ? 14 : 12; }
-
-    function el(tag, cls, text) {
-      var n = document.createElement(tag);
-      if (cls) n.className = cls;
-      if (text !== undefined) n.textContent = text;
-      return n;
-    }
-
-    function render() {
-      screenEl.textContent = '';
-      if (result) {
-        var rows = el('div', 'rows');
-        seq.forEach(function (v, i) {
-          var row = el('div', 'row');
-          var s = String(v);
-          var n = el('div', 'num', s);
-          n.style.fontSize = numSize(s.length) + 'px';
-          row.appendChild(n);
-          row.appendChild(el('div', 'lead'));
-          var r = result[i];
-          if (r.frac) {
-            var f = el('div', 'frac');
-            f.style.fontSize = fracSize(Math.max(String(r.frac[0]).length, String(r.frac[1]).length)) + 'px';
-            f.appendChild(el('div', '', String(r.frac[0])));
-            f.appendChild(el('div', 'bar'));
-            f.appendChild(el('div', '', String(r.frac[1])));
-            row.appendChild(f);
-          } else {
-            row.appendChild(el('div', 'all', 'ALL'));
-          }
-          row.appendChild(el('div', 'pct', r.pct));
-          rows.appendChild(row);
-        });
-        screenEl.appendChild(rows);
-      } else if (seq.length) {
-        var chips = el('div', 'chips');
-        seq.forEach(function (v, i) {
-          if (i) chips.appendChild(el('span', 'sep', '›'));
-          chips.appendChild(el('span', 'chip', String(v)));
-        });
-        screenEl.appendChild(chips);
-      }
-
-      var empty = seq.length === 0;
-      undoBtn.disabled = empty;
-      clearBtn.disabled = empty;
-      if (result) {
-        mainBtn.textContent = '초기화';
-        mainBtn.disabled = false;
-      } else {
-        mainBtn.textContent = '계산하기';
-        mainBtn.disabled = empty;
-      }
-    }
-
-    function renderHistory() {
-      historyList.textContent = '';
-      if (!history.length) {
-        historyList.appendChild(el('div', 'history-empty', '아직 기록이 없어요'));
-        return;
-      }
-      history.forEach(function (h) {
-        var card = el('button', 'entry-card');
-        card.setAttribute('data-glass', '');
-        card.type = 'button';
-        var s = el('div', 'entry-seq');
-        h.seq.forEach(function (v, i) {
-          if (i) s.appendChild(el('i', '', '›'));
-          s.appendChild(el('span', '', String(v)));
-        });
-        card.appendChild(s);
-        card.addEventListener('click', function () {
-          seq = h.seq.slice();
-          result = h.result;
-          closeHistory();
-          render();
-        });
-        historyList.appendChild(card);
-      });
-    }
-
-    function openHistory() {
-      renderHistory();
-      historyEl.hidden = false;
-      historyList.scrollTop = historyList.scrollHeight;
-    }
-    function closeHistory() { historyEl.hidden = true; }
-
-    function append(n) {
-      if (result) { seq = []; result = null; }
-      seq.push(n);
-      render();
-    }
-
-    QUICK.forEach(function (n) {
-      var b = el('button', 'btn', String(n));
-      b.setAttribute('data-glass', '');
-      b.type = 'button';
-      b.addEventListener('click', function () { append(n); });
-      quickEl.appendChild(b);
-    });
-
-    undoBtn.addEventListener('click', function () {
-      if (result) { result = null; }
-      else { seq.pop(); }
-      render();
-    });
-
-    clearBtn.addEventListener('click', function () {
-      seq = []; result = null; render();
-    });
-
-    mainBtn.addEventListener('click', function () {
-      if (result) { seq = []; result = null; }
-      else if (seq.length) {
-        result = compute(seq);
-        history.push({ seq: seq.slice(), result: result });
-      }
-      render();
-    });
-
-    document.getElementById('openHistory').addEventListener('click', openHistory);
-    document.getElementById('closeHistory').addEventListener('click', closeHistory);
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !historyEl.hidden) closeHistory();
-    });
-
-    function parsed() {
-      var t = input.value.replace(/[^0-9]/g, '');
-      if (!t) return 0;
-      return parseInt(t, 10);
-    }
-
-    input.addEventListener('input', function () {
-      var cleaned = input.value.replace(/[^0-9]/g, '');
-      if (cleaned !== input.value) input.value = cleaned;
-      addBtn.disabled = !(parsed() > 0);
-    });
-
-    addBtn.addEventListener('pointerdown', function (e) { e.preventDefault(); });
-
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var v = parsed();
-      if (!(v > 0)) return;
-      append(v);
-      input.value = '';
-      addBtn.disabled = true;
-    });
-
-    document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
-    document.addEventListener('gesturechange', function (e) { e.preventDefault(); });
-
-    render();
-  })();
-</script>
-<script type="module" src="glass.js"></script>
+<div id="root"></div>
+<script type="module" src="app.js"></script>
 </body>
 </html>

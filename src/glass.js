@@ -97,7 +97,9 @@ function remount() {
   mountAll();
 }
 
-if (window.isSecureContext && navigator.gpu) {
+// Call once the [data-glass-scene] roots are in the document.
+export function startGlass() {
+  if (!window.isSecureContext || !navigator.gpu) return;
   navigator.gpu.requestAdapter().then(function (adapter) {
     if (!adapter) return;
     mountAll();
