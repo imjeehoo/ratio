@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="glass.css">
 <style>
   html { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
   body { margin: 0; }
@@ -261,23 +262,54 @@
     font-variant-numeric: tabular-nums;
   }
   .entry-res span { white-space: nowrap; }
+  /* Liquid Glass (only when html.glass is set by glass.js: needs WebGPU on a secure origin). */
+  .backdrop { display: contents; }
+  html.glass, html.glass body { background: #000; color: #fff; }
+  html.glass .app { padding-top: var(--screen-h, 232px); }
+  html.glass .backdrop {
+    display: block;
+    background:
+      radial-gradient(60% 40% at 15% 78%, #3a2cff 0%, transparent 70%),
+      radial-gradient(55% 35% at 90% 62%, #ff3b7a 0%, transparent 70%),
+      radial-gradient(60% 35% at 50% 100%, #00c2a8 0%, transparent 70%),
+      #000;
+  }
+  html.glass .screen { position: relative; background: transparent; }
+  html.glass .chip { background: rgb(255 255 255 / 0.12); }
+  html.glass .pad, html.glass .spacer { position: relative; z-index: 1; }
+  html.glass .btn,
+  html.glass .add,
+  html.glass .main,
+  html.glass .field-wrap { background: transparent; border: 0; color: #fff; }
+  html.glass .btn:active:not(:disabled) { background: transparent; }
+  html.glass .btn.danger { color: #ff8a80; }
+  html.glass .add:disabled,
+  html.glass .main:disabled { background: transparent; opacity: 0.4; }
+  html.glass .field { background: transparent; border: 0; color: #fff; }
+  html.glass .field::placeholder { color: rgb(255 255 255 / 0.55); }
+  html.glass .field:focus-visible { border: 0; }
+  html.glass button:focus-visible { outline-color: #fff; }
+  html.glass .field-wrap:focus-within { outline: 2px solid #fff; outline-offset: 2px; }
+  .field-wrap { display: block; min-width: 0; }
 </style>
 </head>
 <body>
-<div class="app">
-  <section class="screen" id="screen" aria-live="polite"></section>
+<div class="app" id="scene">
+  <div class="backdrop" id="backdrop">
+    <section class="screen" id="screen" aria-live="polite"></section>
+  </div>
 
   <div class="pad">
     <div class="top-actions">
-      <button class="btn" id="undo" type="button">
+      <button class="btn" data-glass id="undo" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z"/>
           <path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/>
         </svg>
         <span>실행 취소</span>
       </button>
-      <button class="btn danger" id="clear" type="button">지우기</button>
-      <button class="btn icon" id="openHistory" type="button" aria-label="기록">
+      <button class="btn danger" data-glass id="clear" type="button">지우기</button>
+      <button class="btn icon" data-glass="circle" id="openHistory" type="button" aria-label="기록">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="9"/>
           <path d="M12 7v5l3.5 2"/>
@@ -290,13 +322,13 @@
 
   <div class="pad">
     <form class="entry" id="entry" autocomplete="off">
-      <input class="field" id="manual" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" enterkeyhint="done" placeholder="직접 입력하기" aria-label="직접 입력하기">
-      <button class="add" id="add" type="submit" disabled>추가</button>
+      <div class="field-wrap" data-glass data-glass-press><input class="field" id="manual" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" enterkeyhint="done" placeholder="직접 입력하기" aria-label="직접 입력하기"></div>
+      <button class="add" data-glass id="add" type="submit" disabled>추가</button>
     </form>
 
     <div class="quick" id="quick"></div>
 
-    <button class="main" id="main" type="button">계산하기</button>
+    <button class="main" data-glass id="main" type="button">계산하기</button>
   </div>
 </div>
 
@@ -442,6 +474,7 @@
 
     QUICK.forEach(function (n) {
       var b = el('button', 'btn', String(n));
+      b.setAttribute('data-glass', '');
       b.type = 'button';
       b.addEventListener('click', function () { append(n); });
       quickEl.appendChild(b);
@@ -501,5 +534,6 @@
     render();
   })();
 </script>
+<script type="module" src="glass.js"></script>
 </body>
 </html>
