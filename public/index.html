@@ -118,7 +118,7 @@
   .rows { display: flex; flex-direction: column; }
   .row {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr) 72px 64px;
+    grid-template-columns: 72px minmax(0, 1fr) 96px 56px;
     align-items: center;
     height: 56px;
   }
@@ -134,17 +134,18 @@
     display: grid;
     justify-items: center;
     align-content: center;
-    font-weight: 700;
+    justify-self: center;
+    color: var(--muted);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1.15;
   }
-  .frac .bar { width: 56px; height: 2px; background: currentColor; margin: 3px 0; }
-  .all { text-align: center; font-weight: 700; font-size: 15px; letter-spacing: 0.02em; }
+  .frac .bar { justify-self: stretch; min-width: 18px; height: 1.5px; background: currentColor; margin: 2px 0; }
+  .all { text-align: center; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
   .pct {
     text-align: center;
-    color: var(--muted);
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 24px;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }

@@ -15,6 +15,8 @@ function gcd(a, b) { while (b) { const t = a % b; a = b; b = t; } return a; }
 
 function pct(v, total) {
   const p = Math.round((v / total) * 1000) / 10;
+  if (p === 0) return "<0.1%";
+  if (p === 100) return ">99.9%";
   return String(p % 1 === 0 ? p.toFixed(0) : p.toFixed(1)) + "%";
 }
 
@@ -32,7 +34,7 @@ function compute(list) {
 }
 
 function numSize(len) { return len <= 3 ? 28 : len === 4 ? 24 : len === 5 ? 20 : 17; }
-function fracSize(len) { return len <= 3 ? 18 : len === 4 ? 16 : len === 5 ? 14 : 12; }
+function fracSize(len) { return len <= 3 ? 13 : len === 4 ? 12 : 11; }
 
 let nextId = 1;
 const item = (v) => ({ id: nextId++, v });
@@ -80,6 +82,7 @@ function Rows({ seq, result, ref }) {
               {text}
             </motion.div>
             <motion.div className="lead" variants={rowPart} custom={i} />
+            <motion.div className="pct" variants={rowPart} custom={i}>{r.pct}</motion.div>
             {r.frac ? (
               <motion.div
                 className="frac"
@@ -94,7 +97,6 @@ function Rows({ seq, result, ref }) {
             ) : (
               <motion.div className="all" variants={rowPart} custom={i}>ALL</motion.div>
             )}
-            <motion.div className="pct" variants={rowPart} custom={i}>{r.pct}</motion.div>
           </motion.div>
         );
       })}
