@@ -1,11 +1,9 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
+import { flushSync } from "react-dom";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { startGlass } from "./glass.js";
 
 const QUICK = [5, 10, 15, 20, 25, 30, 35, 40, 45];
-// Keep in sync with .screen: min-height, and vertical padding plus bottom border.
-const SCREEN_MIN = 232;
-const SCREEN_CHROME = 25;
 
 // One spring for everything that moves; a slightly bouncier one for things popping in and out.
 const SPRING = { type: "spring", visualDuration: 0.4, bounce: 0.15 };
@@ -36,13 +34,30 @@ function compute(list) {
 function numSize(len) { return len <= 3 ? 28 : len === 4 ? 24 : len === 5 ? 20 : 17; }
 function fracSize(len) { return len <= 3 ? 13 : len === 4 ? 12 : 11; }
 
+// Changes that resize the display (calculate, reset, clear, picking from history) run as a View
+// Transition: React commits once, the glass re-renders once at the final layout, and the browser
+// animates snapshots on the compositor instead of re-rendering every glass surface each frame.
+// Number entry stays on Motion, since it rarely moves anything with glass on it.
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+let running = null;
+
+function morph(update) {
+  if (!document.startViewTransition || reducedMotion.matches) { update(); return; }
+  running?.skipTransition();
+  const vt = document.startViewTransition(() => flushSync(update));
+  running = vt;
+  vt.finished.finally(() => { if (running === vt) running = null; });
+}
+
 let nextId = 1;
 const item = (v) => ({ id: nextId++, v });
 
-// Chips and Rows take a ref so AnimatePresence's popLayout can lift the exiting one out of the flow.
-function Chips({ seq, ref }) {
+// Each number carries a view-transition-name, so it flies from its chip to its result row.
+const vtName = (s) => ({ viewTransitionName: "n" + s.id });
+
+function Chips({ seq }) {
   return (
-    <motion.div ref={ref} className="chips" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING}>
+    <div className="chips">
       <AnimatePresence mode="popLayout" initial={false}>
         {seq.map((s, i) => (
           <motion.span
@@ -56,12 +71,12 @@ function Chips({ seq, ref }) {
           >
             {i > 0 && <span className="sep">›</span>}
             <span className="chip">
-              <motion.span layoutId={"n" + s.id} transition={SPRING}>{s.v}</motion.span>
+              <span style={vtName(s)}>{s.v}</span>
             </span>
           </motion.span>
         ))}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
 
@@ -70,17 +85,15 @@ const rowPart = {
   show: (i) => ({ opacity: 1, x: 0, transition: { ...SPRING, delay: 0.05 + i * 0.04 } }),
 };
 
-function Rows({ seq, result, ref }) {
+function Rows({ seq, result }) {
   return (
-    <motion.div ref={ref} className="rows" initial={{ opacity: 1, scale: 1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={SPRING}>
+    <div className="rows">
       {seq.map((s, i) => {
         const r = result[i];
         const text = String(s.v);
         return (
           <motion.div key={s.id} className="row" initial="hidden" animate="show" custom={i}>
-            <motion.div layoutId={"n" + s.id} className="num" style={{ fontSize: numSize(text.length) }} transition={SPRING}>
-              {text}
-            </motion.div>
+            <div className="num" style={{ fontSize: numSize(text.length) }}><span style={vtName(s)}>{text}</span></div>
             <motion.div className="lead" variants={rowPart} custom={i} />
             <motion.div className="pct" variants={rowPart} custom={i}>{r.pct}</motion.div>
             {r.frac ? (
@@ -100,7 +113,7 @@ function Rows({ seq, result, ref }) {
           </motion.div>
         );
       })}
-    </motion.div>
+    </div>
   );
 }
 
@@ -160,26 +173,11 @@ function History({ open, entries, onPick, onClose }) {
   );
 }
 
-// The display springs to its content's height, which moves the controls below it through real layout
-// (no transforms), so their glass follows exactly.
 function Screen({ children }) {
-  const inner = useRef(null);
-  const [height, setHeight] = useState(null);
-  useLayoutEffect(() => {
-    const ro = new ResizeObserver(() => setHeight(inner.current.offsetHeight));
-    ro.observe(inner.current);
-    return () => ro.disconnect();
-  }, []);
   return (
-    <motion.section
-      className="screen"
-      aria-live="polite"
-      initial={false}
-      animate={{ height: height == null ? "auto" : Math.max(SCREEN_MIN, height + SCREEN_CHROME) }}
-      transition={SPRING}
-    >
-      <div className="screen-inner" ref={inner}>{children}</div>
-    </motion.section>
+    <section className="screen" aria-live="polite">
+      <div className="screen-inner">{children}</div>
+    </section>
   );
 }
 
@@ -206,30 +204,34 @@ export function App() {
   }, []);
 
   function append(n) {
-    setSeq((prev) => (result ? [item(n)] : [...prev, item(n)]));
-    setResult(null);
+    if (result) morph(() => { setSeq([item(n)]); setResult(null); });
+    else setSeq((prev) => [...prev, item(n)]);
   }
 
   function undo() {
-    if (result) setResult(null);
+    if (result) morph(() => setResult(null));
     else setSeq((prev) => prev.slice(0, -1));
   }
 
-  function clear() { setSeq([]); setResult(null); }
+  function clear() { morph(() => { setSeq([]); setResult(null); }); }
 
   function main() {
     if (result) { clear(); return; }
     if (!seq.length) return;
     const values = seq.map((s) => s.v);
     const r = compute(values);
-    setResult(r);
-    setHistory((prev) => [...prev, { id: nextId++, seq: values, result: r }]);
+    morph(() => {
+      setResult(r);
+      setHistory((prev) => [...prev, { id: nextId++, seq: values, result: r }]);
+    });
   }
 
   function pick(h) {
-    setSeq(h.seq.map(item));
-    setResult(h.result);
-    setHistoryOpen(false);
+    morph(() => {
+      setSeq(h.seq.map(item));
+      setResult(h.result);
+      setHistoryOpen(false);
+    });
   }
 
   const value = parseInt(text, 10) || 0;
@@ -244,70 +246,66 @@ export function App() {
 
   return (
     <MotionConfig reducedMotion="user" transition={SPRING}>
-      <LayoutGroup>
-        <div className="app" data-glass-scene="">
-          <div className="backdrop" data-glass-content="" />
-          <Screen>
-            <AnimatePresence mode="popLayout" initial={false}>
-              {result ? <Rows key="rows" seq={seq} result={result} /> : !empty && <Chips key="chips" seq={seq} />}
-            </AnimatePresence>
-          </Screen>
+      <div className="app" data-glass-scene="">
+        <div className="backdrop" data-glass-content="" />
+        <Screen>
+          {result ? <Rows seq={seq} result={result} /> : !empty && <Chips seq={seq} />}
+        </Screen>
 
-          <div className="pad">
-            <div className="top-actions">
-              <button className="btn" data-glass="" type="button" disabled={empty} onClick={undo}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z" />
-                  <path d="M11.5 9.5l5 5M16.5 9.5l-5 5" />
-                </svg>
-                <span>실행 취소</span>
-              </button>
-              <button className="btn danger" data-glass="" type="button" disabled={empty} onClick={clear}>지우기</button>
-              <button className="btn icon" data-glass="circle" type="button" aria-label="기록" onClick={() => setHistoryOpen(true)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v5l3.5 2" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div className="spacer" />
-
-          <div className="pad">
-            <form className="entry" autoComplete="off" onSubmit={submit}>
-              <div className="field-wrap" data-glass="">
-                <input
-                  className="field"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  enterKeyHint="done"
-                  placeholder="직접 입력하기"
-                  aria-label="직접 입력하기"
-                  value={text}
-                  onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, ""))}
-                />
-              </div>
-              {/* Keep focus (and the on-screen keyboard) in the field when tapping add. */}
-              <button className="add" data-glass="" type="submit" disabled={!(value > 0)} onPointerDown={(e) => e.preventDefault()}>추가</button>
-            </form>
-
-            <div className="quick">
-              {QUICK.map((n) => (
-                <button key={n} className="btn" data-glass="" type="button" onClick={() => append(n)}>{n}</button>
-              ))}
-            </div>
-
-            <button className="main" data-glass="" type="button" disabled={!result && empty} onClick={main}>
-              {result ? "초기화" : "계산하기"}
+        <div className="pad">
+          <div className="top-actions">
+            <button className="btn" data-glass="" type="button" disabled={empty} onClick={undo}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z" />
+                <path d="M11.5 9.5l5 5M16.5 9.5l-5 5" />
+              </svg>
+              <span>실행 취소</span>
+            </button>
+            <button className="btn danger" data-glass="" type="button" disabled={empty} onClick={clear}>지우기</button>
+            <button className="btn icon" data-glass="circle" type="button" aria-label="기록" onClick={() => setHistoryOpen(true)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3.5 2" />
+              </svg>
             </button>
           </div>
         </div>
 
-        <History open={historyOpen} entries={history} onPick={pick} onClose={() => setHistoryOpen(false)} />
-      </LayoutGroup>
+        <div className="spacer" />
+
+        <div className="pad">
+          <form className="entry" autoComplete="off" onSubmit={submit}>
+            <div className="field-wrap" data-glass="">
+              <input
+                className="field"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                enterKeyHint="done"
+                placeholder="직접 입력하기"
+                aria-label="직접 입력하기"
+                value={text}
+                onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, ""))}
+              />
+            </div>
+            {/* Keep focus (and the on-screen keyboard) in the field when tapping add. */}
+            <button className="add" data-glass="" type="submit" disabled={!(value > 0)} onPointerDown={(e) => e.preventDefault()}>추가</button>
+          </form>
+
+          <div className="quick">
+            {QUICK.map((n) => (
+              <button key={n} className="btn" data-glass="" type="button" onClick={() => append(n)}>{n}</button>
+            ))}
+          </div>
+
+          <button className="main" data-glass="" type="button" disabled={!result && empty} onClick={main}>
+            {result ? "초기화" : "계산하기"}
+          </button>
+        </div>
+      </div>
+
+      <History open={historyOpen} entries={history} onPick={pick} onClose={() => setHistoryOpen(false)} />
     </MotionConfig>
   );
 }

@@ -89,6 +89,19 @@
     overflow: hidden;
   }
   .screen-inner { position: relative; width: 100%; }
+  /* View Transitions (see morph() in App.jsx). The display and the buttons right under it move as
+     their own snapshots; each number flies on its own name. Taps pass through to the live page. */
+  .screen { view-transition-name: screen; }
+  .top-actions { view-transition-name: top-actions; }
+  ::view-transition { pointer-events: none; }
+  ::view-transition-group(*) {
+    /* The app's SPRING (visualDuration 0.4, bounce 0.15) as CSS easing. */
+    animation-duration: 750ms;
+    animation-timing-function: linear(0, 0.0663, 0.2105, 0.3763, 0.5332, 0.6669, 0.7733, 0.8533, 0.9107, 0.9499, 0.9754, 0.9911, 1, 1.0044, 1.0061, 1.0062, 1.0055, 1.0045, 1.0035, 1.0026, 1.0018, 1.0012, 1.0008, 1, 1);
+  }
+  ::view-transition-old(*), ::view-transition-new(*) { animation-duration: 300ms; }
+  /* Keep the display's content centred and unstretched while its box resizes. */
+  ::view-transition-old(screen), ::view-transition-new(screen) { height: 100%; object-fit: none; }
   .chips {
     display: flex;
     flex-wrap: wrap;
@@ -129,6 +142,7 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  .num > span { display: inline-block; }
   .lead { height: 1px; background: var(--faint); margin: 0 16px; }
   .frac {
     display: grid;
